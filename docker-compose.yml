@@ -35,12 +35,26 @@ services:
             PORT: '${PORT:-10001}'
             APIPORT: '${APIPORT:-3000}'
             HOT_RELOAD: '${HOT_RELOAD:-true}'
+
+            # Minio
+            RESULT_STORE_TYPE: s3
+            STORE_BUCKET_NAME: querybook
+            STORE_PATH_PREFIX: results/
+            AWS_ACCESS_KEY_ID: minio
+            AWS_SECRET_ACCESS_KEY: minio123
         restart: 'always'
         volumes: *querybook-volumes
         depends_on: *querybook-depends-on
     worker:
         container_name: querybook_worker
         image: *querybook-image
+        environment:
+            # Minio
+            RESULT_STORE_TYPE: s3
+            STORE_BUCKET_NAME: querybook
+            STORE_PATH_PREFIX: results/
+            AWS_ACCESS_KEY_ID: minio
+            AWS_SECRET_ACCESS_KEY: minio123
         tty: true
         stdin_open: true
         command: './querybook/scripts/runservice worker -c 5'
@@ -127,6 +141,41 @@ services:
             timeout: 30s
             retries: 3
 
+    minio:
+        image: minio/minio:RELEASE.2024-04-18T19-09-19Z
+        container_name: querybook_minio
+        command: server /data --console-address ":9001"
+        environment:
+            - 'MINIO_ROOT_USER=minio'
+            - 'MINIO_ROOT_PASSWORD=minio123'
+        ports:
+            - '9000:9000'
+            - '9001:9001'
+        volumes:
+            - minio-data:/data
+        healthcheck:
+            test:
+                ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+            interval: 30s
+            timeout: 20s
+            retries: 3
+
+    minio_init:
+        image: minio/mc
+        container_name: querybook_minio_init
+        depends_on:
+            - minio
+        entrypoint: >
+            /bin/sh -c "
+            echo Waiting for minio service to start...;
+            sleep 15;
+
+            /usr/bin/mc alias set qbminio http://minio:9000 minio minio123;
+            /usr/bin/mc mb qbminio/querybook;
+            /usr/bin/mc policy set public qbminio/querybook;
+            exit 0;
+            "
+
     # EMAIL SERVER EXAMPLE
     # If you need email to work use this
     # dockerhostforward:
@@ -163,6 +212,8 @@ services:
 volumes:
     my-db:
     osdata1:
+        driver: local
+    minio-data:
         driver: local
     # file:
     #     driver: local

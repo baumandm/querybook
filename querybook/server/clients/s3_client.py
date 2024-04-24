@@ -14,7 +14,7 @@ class MultiPartUploader(object):
     def __init__(self, bucket_name, key):
         self._bucket_name = bucket_name
         self._key = key
-        self._s3 = boto3.client("s3")
+        self._s3 = boto3.client("s3", use_ssl=False, endpoint_url="http://minio:9000")
         self._mpu = self._s3.create_multipart_upload(Bucket=bucket_name, Key=key)
         self._parts = []
         self._part_number = 1
@@ -82,10 +82,14 @@ class S3KeySigner(object):
             self._s3 = boto3.client(
                 "s3",
                 QuerybookSettings.AWS_REGION,
+                use_ssl=False,
+                endpoint_url="http://minio:9000",
                 config=Config(signature_version="s3v4"),
             )
         else:
-            self._s3 = boto3.client("s3")
+            self._s3 = boto3.client(
+                "s3", use_ssl=False, endpoint_url="http://minio:9000"
+            )
         self._bucket = boto3.resource("s3").Bucket(bucket_name)
 
     def generate_presigned_url(
@@ -119,7 +123,9 @@ class S3FileReader(ChunkReader):
 
         # Now connect to s3 using boto3
         try:
-            self._s3 = boto3.resource("s3")
+            self._s3 = boto3.resource(
+                "s3", use_ssl=False, endpoint_url="http://minio:9000"
+            )
             self._object = self._s3.Object(self._bucket_name, key)
             self._body = self._object.get()["Body"]
         except botocore.exceptions.ClientError as e:
